@@ -1,14 +1,14 @@
-﻿using UnityEngine;
+﻿using System;
+using UnityEngine;
 using UnityEngine.SceneManagement;
 
 namespace Assets.MainMenu.Scripts
 {
     public class SetScence : MonoBehaviour
     {
-        private Rigidbody rg;
-        public int SceneIndex;
+        public Pair[] ControlPairs;
 
-        private void Start()
+        private void Awake()
         {
             if (PlayerPrefs.GetInt("IsFirstStart", 1) == 1)
             {
@@ -18,25 +18,33 @@ namespace Assets.MainMenu.Scripts
             Global.Record = PlayerPrefs.GetInt("BestScore", 0);
             GameObject.Find("NumberText").GetComponent<TextMesh>().text = Global.Record.ToString();
 
-            rg = GetComponent<Rigidbody>();
-        }
-
-        private void OnMouseOver()
-        {
-            if (Input.GetKeyDown(KeyCode.Mouse0))
-                rg.AddForce(Vector3.forward * 300);
-            if (Input.GetKeyDown(KeyCode.Mouse1))
-                rg.AddForce(Vector3.forward * -300);
+            for (int i = 0; i < ControlPairs.Length; i++)
+            {
+                var pair = ControlPairs[i];
+                if (pair.SceneIndex == -1)
+                {
+                    pair.Control.OnDropped.AddListener(() => 
+                    {
+                        Application.Quit();
+                        Debug.Log("App closed");
+                    });
+                }
+                else
+                    pair.Control.OnDropped.AddListener(() => SceneManager.LoadScene(pair.SceneIndex));
+            }
         }
 
         private void FixedUpdate()
         {
-            if (Input.GetKeyDown("escape") || SceneIndex < 0)
+            if (Input.GetKeyDown("escape"))
                 Application.Quit();
+        }
 
-            if (!(transform.position.y < -5) && Mathf.Abs(transform.position.z) < 7) return;
-
-            SceneManager.LoadScene(SceneIndex);
+        [Serializable]
+        public struct Pair
+        {
+            public int SceneIndex;
+            public ControlClickHandler Control;
         }
     }
 }
