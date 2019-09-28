@@ -1,131 +1,103 @@
-﻿using UnityEngine;
-using UnityEngine.UI;
+﻿using System;
+using Script.Game;
+using UnityEngine;
+using Random = UnityEngine.Random;
 
 public class WallController : MonoBehaviour
 {
-	private static readonly Color[] Colors;
+    public float acceleration;
 
-	private Vector3[] _endP;
+    private Vector3[] endP;
 
-	private int                       _generated;
-	private ParticleSystem.MainModule _particleSystemMain;
+    private int generated;
+    private PlayerController playerController;
 
-	private PlayerController _playerController;
+    private Color pSysColor;
+    public float speed;
+    private GameObject[] walls;
 
-	private Color        _pSysColor;
-	private Text         _scoreText;
-	private GameObject[] _walls;
-	public  float        acceleration;
+    private float[] x, z;
 
-	public ParticleSystem ParticleSystem;
+    public event Action wallsGenerated;
 
-	public GameObject player;
+    private void Awake()
+    {
+        playerController = GameManager.instance.playerController;
 
-	public float speed;
+        walls = GameObject.FindGameObjectsWithTag("Wall");
+        endP = new Vector3[walls.Length];
+        x = new float[walls.Length];
+        z = new float[walls.Length];
 
-	private float[] x, z;
+        Generate();
+    }
 
-	static WallController()
-	{
-		Colors = new[]
-		{
-			new Color(255f / 255, 204f / 255, 153f / 255),
-			new Color(204f / 255, 255f / 255, 153f / 255),
-			new Color(204f / 255, 153f / 255, 255f / 255),
-			new Color(255f / 255, 153f / 255, 204f / 255),
-			new Color(153f / 255, 204f / 255, 255f / 255),
-			new Color(153f / 255, 255f / 255, 204f / 255)
-		};
-	}
+    private static int GetRndPos()
+    {
+        return Random.Range(-1, 2) * 3;
+    }
 
-	private void Awake()
-	{
-		_particleSystemMain = ParticleSystem.main;
-		_playerController   = player.GetComponent<PlayerController>();
-		_scoreText          = GameObject.Find("ScoreText").GetComponent<Text>();
+    private static float RndFrom(float? axis = null)
+    {
+        var result = GetRndPos();
 
-		_walls = GameObject.FindGameObjectsWithTag("Wall");
-		_endP  = new Vector3[_walls.Length];
-		x      = new float[_walls.Length];
-		z      = new float[_walls.Length];
+        if (axis == null)
+            return result;
 
-		Generate();
-	}
+        while (axis == result)
+            result = GetRndPos();
 
-	private static int GetRndPos()
-	{
-		return Random.Range(-1, 2) * 3;
-	}
+        return result;
+    }
 
-	private static float RndFrom(float? axis = null)
-	{
-		var outp = GetRndPos();
+    private void Generate()
+    {
+        speed += acceleration;
+        playerController.speed += 1;
 
-		if (axis == null)
-			return outp;
+        Direction dir;
+        do
+        {
+            dir = (Direction) Random.Range(-2, 3);
+        } while (dir == 0);
 
-		while (axis == outp)
-			outp = GetRndPos();
+        if (dir == Direction.LeftToRight || dir == Direction.RightToLeft)
+        {
+            for (var i = 0; i < x.Length; i++)
+                x[i] = 50 * (int) dir;
 
-		return outp;
-	}
+            z[0] = RndFrom();
+            z[1] = RndFrom(z[0]);
+            for (var i = 0; i < endP.Length; i++)
+                endP[i] = new Vector3(-x[i], 2, z[i]);
+        }
+        else
+        {
+            for (var i = 0; i < z.Length; i++)
+                z[i] = 50 * ((int) dir / 2);
 
-	private void Generate()
-	{
-		_pSysColor              =  Colors[Random.Range(0, Colors.Length)];
-		speed                   += acceleration;
-		_playerController.speed += 1;
+            x[0] = RndFrom();
+            x[1] = RndFrom(x[0]);
 
-		Direction dir;
-		do
-		{
-			dir = (Direction) Random.Range(-2, 3);
-		} while (dir == 0);
+            for (var i = 0; i < endP.Length; i++)
+                endP[i] = new Vector3(x[i], 2, -z[i]);
+        }
 
-		if (dir == Direction.LeftToRight || dir == Direction.RightToLeft)
-		{
-			for (var i = 0; i < x.Length; i++)
-				x[i] = 50 * (int) dir;
+        for (var i = 0; i < walls.Length; i++)
+        {
+            walls[i].transform.position = new Vector3(x[i], 2, z[i]);
+            walls[i].transform.rotation = Quaternion.identity;
+        }
 
-			z[0] = RndFrom();
-			z[1] = RndFrom(z[0]);
-			for (var i = 0; i < _endP.Length; i++)
-				_endP[i] = new Vector3(-x[i], 2, z[i]);
-		}
-		else
-		{
-			for (var i = 0; i < z.Length; i++)
-				z[i] = 50 * ((int) dir / 2);
+        wallsGenerated?.Invoke();
+    }
 
-			x[0] = RndFrom();
-			x[1] = RndFrom(x[0]);
+    private void Update()
+    {
+        if (walls[0].transform.position == endP[0] && Global.IsAlive) Generate();
 
-			for (var i = 0; i < _endP.Length; i++)
-				_endP[i] = new Vector3(x[i], 2, -z[i]);
-		}
-
-		for (var i = 0; i < _walls.Length; i++)
-		{
-			_walls[i].transform.position = new Vector3(x[i], 2, z[i]);
-			_walls[i].transform.rotation = Quaternion.identity;
-		}
-	}
-
-	private void Update()
-	{
-		if (_walls[0].transform.position == _endP[0] && Global.IsAlive)
-		{
-			Generate();
-			_scoreText.text = "Score: " + ++_generated;
-			if (_generated > Global.Record)
-				Global.Record = _generated;
-		}
-
-		for (var i = 0; i < _walls.Length; i++)
-			_walls[i].transform.position =
-				Vector3.MoveTowards(_walls[i].transform.position, _endP[i], speed * Time.deltaTime);
-
-		_particleSystemMain.startColor =
-			Color.Lerp(_particleSystemMain.startColor.color, _pSysColor, 3 * Time.deltaTime);
-	}
+        for (var i = 0; i < walls.Length; i++)
+            walls[i].transform.position =
+                Vector3.MoveTowards(walls[i].transform.position, endP[i], speed * Time.deltaTime);
+    }
 }

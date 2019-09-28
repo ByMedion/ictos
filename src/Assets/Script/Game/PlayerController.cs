@@ -1,152 +1,96 @@
 ﻿using System;
+using System.Collections;
+using Script.Game;
+using Script.Game.SwipeDetection;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
 public class PlayerController : MonoBehaviour
 {
-	private static readonly Vector3 TopLeft      = new Vector3(-3f, 2f, 3f),
-	                                TopMiddle    = new Vector3(0f, 2f, 3f),
-	                                TopRight     = new Vector3(3f, 2f, 3f),
-	                                MiddleLeft   = new Vector3(-3f, 2f, 0f),
-	                                Middle       = new Vector3(0f, 2f, 0f),
-	                                MiddleRight  = new Vector3(3f, 2f, 0f),
-	                                BottomLeft   = new Vector3(-3f, 2f, -3f),
-	                                BottomMiddle = new Vector3(0f, 2f, -3f),
-	                                BottomRight  = new Vector3(3f, 2f, -3f);
+    private static readonly Vector3 TopLeft = new Vector3(-3f, 2f, 3f),
+        TopMiddle = new Vector3(0f, 2f, 3f),
+        TopRight = new Vector3(3f, 2f, 3f),
+        MiddleLeft = new Vector3(-3f, 2f, 0f),
+        Middle = new Vector3(0f, 2f, 0f),
+        MiddleRight = new Vector3(3f, 2f, 0f),
+        BottomLeft = new Vector3(-3f, 2f, -3f),
+        BottomMiddle = new Vector3(0f, 2f, -3f),
+        BottomRight = new Vector3(3f, 2f, -3f);
 
-	private Vector3 _endPoint;
-#if UNITY_ANDROID || UNITY_IOS
-	private Vector2 _touchStart, _touchEnd;
-#endif
-	public float speed;
+    private Vector3 _endPoint;
+    private Vector2 _touchStart, _touchEnd;
 
-	private void Awake()
-	{
-		_endPoint      = gameObject.transform.position;
-		Global.IsAlive = true;
-		KeyMap.Load();
-	}
+    private Coroutine movingCoroutine;
 
-	private void Update()
-	{
-		if (Input.GetKeyDown(KeyCode.Escape))
-			SceneManager.LoadScene(Scenes.Menu);
+    public float speed;
+    private SwipeDetector swipeDetector;
 
-		if (!Global.IsAlive)
-			return;
+    public event Action onGameOver;
 
-#if UNITY_STANDALONE
-		if (Input.anyKeyDown)
-			if (Input.GetKeyDown(KeyMap.TopLeft))
-				_endPoint = TopLeft;
-			else if (Input.GetKeyDown(KeyMap.TopMiddle))
-				_endPoint = TopMiddle;
-			else if (Input.GetKeyDown(KeyMap.TopRight))
-				_endPoint = TopRight;
+    private void Awake()
+    {
+        _endPoint = gameObject.transform.position;
+        Global.IsAlive = true;
+        KeyMap.Load();
+        swipeDetector = GameManager.instance.swipeDetector;
+        swipeDetector.onSwipeDetected += OnSwipeDetected;
+    }
 
-			else if (Input.GetKeyDown(KeyMap.MiddleLeft))
-				_endPoint = MiddleLeft;
-			else if (Input.GetKeyDown(KeyMap.Middle))
-				_endPoint = Middle;
-			else if (Input.GetKeyDown(KeyMap.MiddleRight))
-				_endPoint = MiddleRight;
+    private void OnSwipeDetected(SwipeDirection direction)
+    {
+        Debug.Log($"Swipe detected: {direction} ({(int) direction} degree)");
+        movingCoroutine = StartCoroutine(MovePlayer(direction));
+    }
 
-			else if (Input.GetKeyDown(KeyMap.BottomLeft))
-				_endPoint = BottomLeft;
-			else if (Input.GetKeyDown(KeyMap.BottomMiddle))
-				_endPoint = BottomMiddle;
-			else if (Input.GetKeyDown(KeyMap.BottomRight))
-				_endPoint = BottomRight;
-#elif UNITY_ANDROID
+    private IEnumerator MovePlayer(SwipeDirection swipeDirection)
+    {
+        if (movingCoroutine != null)
+            StopCoroutine(movingCoroutine);
 
-#if UNITY_EDITOR
-		if (Input.GetMouseButtonDown(0))
-		{
-			_touchStart = Input.mousePosition;
-		}
-		else if (Input.GetMouseButtonUp(0))
-		{
-			_touchEnd = Input.mousePosition;
-#else
-		var touch = Input.touches[0];
-		if (touch.phase == TouchPhase.Began)
-			touchStart = touch.position;
-		else if (touch.phase == TouchPhase.Ended)
-		{
-			touchEnd = touch.position;
-#endif
+        var endPoint = GetEndPoint(swipeDirection);
 
-			var delta = _touchEnd - _touchStart;
-			if (Math.Abs(delta.magnitude) < 0.05f)
-			{
-				_endPoint = Middle;
-			}
-			else
-			{
-				var swipeAngle = Rounded45Angle(delta);
-				switch (swipeAngle)
-				{
-					case 360:
-					case 0:
-						_endPoint = TopLeft;
+        var lerpTime = 1;
+        var currentLerpTime = Time.deltaTime;
+        while (transform.position != endPoint)
+        {
+            var t = currentLerpTime / lerpTime;
+            t = Mathf.Sin(t * Mathf.PI * 0.5f);
 
-						break;
-					case 45:
-						_endPoint = TopMiddle;
+            transform.position = Vector3.Lerp(transform.position, endPoint, t);
+            currentLerpTime += Time.deltaTime;
+            yield return null;
+        }
+    }
 
-						break;
-					case 90:
-						_endPoint = TopRight;
+    private static Vector3 GetEndPoint(SwipeDirection swipeDirection)
+    {
+        switch ((int) swipeDirection)
+        {
+            case -1: return Middle;
+            case 0: return TopLeft;
+            case 45: return TopMiddle;
+            case 90: return TopRight;
+            case 135: return MiddleRight;
+            case 180: return BottomRight;
+            case 225: return BottomMiddle;
+            case 270: return BottomLeft;
+            case 315: return MiddleLeft;
+            default: throw new ArgumentException();
+        }
+    }
 
-						break;
-					case 135:
-						_endPoint = MiddleRight;
+    private void Update()
+    {
+        if (Input.GetKeyDown(KeyCode.Escape))
+            SceneManager.LoadScene(Scenes.Menu);
+    }
 
-						break;
-					case 180:
-						_endPoint = BottomRight;
-
-						break;
-					case 225:
-						_endPoint = BottomMiddle;
-
-						break;
-					case 270:
-
-						_endPoint = BottomLeft;
-
-						break;
-					case 315:
-						_endPoint = MiddleLeft;
-
-						break;
-				}
-			}
-		}
-#endif
-		gameObject.transform.position =
-			Vector3.MoveTowards(gameObject.transform.position, _endPoint, speed * Time.deltaTime);
-	}
-#if UNITY_ANDROID
-	private static int Rounded45Angle(Vector2 vector)
-	{
-		float angle;
-		if (vector.x < 0)
-			angle = 360 - Mathf.Atan2(vector.x, vector.y) * Mathf.Rad2Deg * -1;
-		else
-			angle = Mathf.Atan2(vector.x, vector.y) * Mathf.Rad2Deg;
-
-		return Mathf.RoundToInt(angle / 45) * 45;
-	}
-#endif
-
-	private void OnCollisionEnter(Collision collision)
-	{
-		if (collision.gameObject.CompareTag("Wall"))
-		{
-			Global.IsAlive = false;
-			PlayerPrefs.SetInt("BestScore", Global.Record);
-			PlayerPrefs.Save();
-		}
-	}
+    private void OnCollisionEnter(Collision collision)
+    {
+        if (collision.gameObject.CompareTag("Wall"))
+        {
+            StopCoroutine(movingCoroutine);
+            onGameOver?.Invoke();
+        }
+    }
 }
